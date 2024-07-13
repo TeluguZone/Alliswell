@@ -44,8 +44,8 @@ PAGE_NO      = 1
 
 
 class MirrorStatus:
-    STATUS_UPLOADING   = "Upload"
-    STATUS_DOWNLOADING = "Download"
+    STATUS_UPLOADING   = "Uploading"
+    STATUS_DOWNLOADING = "Downloading"
     STATUS_CLONING     = "Clone"
     STATUS_QUEUEDL     = "QueueDL"
     STATUS_QUEUEUP     = "QueueUp"
@@ -53,6 +53,7 @@ class MirrorStatus:
     STATUS_ARCHIVING   = "Archive"
     STATUS_EXTRACTING  = "Extract"
     STATUS_SPLITTING   = "Split"
+    STATUS_METADATA    = "Adding Metadata"
     STATUS_CHECKING    = "CheckUp"
     STATUS_SEEDING     = "Seed"
 
@@ -141,10 +142,10 @@ def get_progress_bar_string(pct):
     p = min(max(pct, 0), 100)
     cFull = int(p // 8)
     cPart = int(p % 8 - 1)
-    p_str = '■' * cFull
+    p_str = '●' * cFull
     if cPart >= 0:
-        p_str += ['▤', '▥', '▦', '▧', '▨', '▩', '■'][cPart]
-    p_str += '□' * (12 - cFull)
+        p_str += ['◌', '○', '○', '◎', '◉', '◕', '●'][cPart]
+    p_str += '◌' * (12 - cFull)
     return f"[{p_str}]"
 
 
@@ -155,12 +156,12 @@ def get_all_versions():
     except FileNotFoundError:
         vp = ''
     try:
-        result = srun(['ffmpeg', '-version'], capture_output=True, text=True)
+        result = srun([bot_cache['pkgs'][2], '-version'], capture_output=True, text=True)
         vf = result.stdout.split('\n')[0].split(' ')[2].split('ubuntu')[0]
     except FileNotFoundError:
         vf = ''
     try:
-        result = srun(['rclone', 'version'], capture_output=True, text=True)
+        result = srun([bot_cache['pkgs'][3], 'version'], capture_output=True, text=True)
         vr = result.stdout.split('\n')[0].split(' ')[1]
     except FileNotFoundError:
         vr = ''
@@ -214,7 +215,7 @@ def get_readable_message():
             ChatType.SUPERGROUP, ChatType.CHANNEL] and not config_dict['DELETE_LINKS'] else ''
         elapsed = time() - download.message.date.timestamp()
         msg += BotTheme('STATUS_NAME', Name="Task is being Processed!" if config_dict['SAFE_MODE'] and elapsed >= config_dict['STATUS_UPDATE_INTERVAL'] else escape(f'{download.name()}'))
-        if download.status() not in [MirrorStatus.STATUS_SPLITTING, MirrorStatus.STATUS_SEEDING]:
+        if download.status() not in [MirrorStatus.STATUS_SPLITTING, MirrorStatus.STATUS_SEEDING, MirrorStatus.STATUS_METADATA]:
             msg += BotTheme('BAR', Bar=f"{get_progress_bar_string(download.progress())} {download.progress()}")
             msg += BotTheme('PROCESSED', Processed=f"{download.processed_bytes()} of {download.size()}")
             msg += BotTheme('STATUS', Status=download.status(), Url=msg_link)
@@ -352,8 +353,8 @@ def is_share_link(url):
     return bool(re_match(r'https?:\/\/.+\.gdtot\.\S+|https?:\/\/(.+\.filepress|filebee|appdrive|gdflix|www.jiodrive)\.\S+', url))
 
 
-def is_index_link(url): 
-     return bool(re_match(r'https?:\/\/.+\/\d+\:\/', url))    
+def is_index_link(url):
+     return bool(re_match(r'https?:\/\/.+\/\d+\:\/', url))
 
 
 def is_mega_link(url):
@@ -564,7 +565,7 @@ async def get_stats(event, key="home"):
         if await aiopath.exists('.git'):
             last_commit = (await cmd_exec("git log -1 --pretty='%cd ( %cr )' --date=format-local:'%d/%m/%Y'", True))[0]
             changelog = (await cmd_exec("git log -1 --pretty=format:'<code>%s</code> <b>By</b> %an'", True))[0]
-        official_v = (await cmd_exec(f"curl -o latestversion.py https://raw.githubusercontent.com/weebzone/WZML-X/{config_dict['UPSTREAM_BRANCH']}/bot/version.py -s && python3 latestversion.py && rm latestversion.py", True))[0]
+        official_v = (await cmd_exec("curl -o latestversion.py https://gitlab.com/mysterysd.sd/WZML-X/-/raw/hk_wzmlx/bot/version.py -s && python3 latestversion.py && rm latestversion.py", True))[0]
         msg = BotTheme('REPO_STATS',
             last_commit=last_commit,
             bot_version=get_version(),
@@ -671,6 +672,7 @@ def extra_btns(buttons, already=False):
         for btn_name, btn_url in extra_buttons.items():
             buttons.ubutton(btn_name, btn_url, 'l_body')
     return buttons, True
+
 
 
 async def set_commands(client):
