@@ -1,38 +1,37 @@
 #!/usr/bin/env python3
 import platform
-from base64 import b64encode
-from datetime import datetime
-from os import path as ospath
-from pkg_resources import get_distribution, DistributionNotFound
-from aiofiles import open as aiopen
-from aiofiles.os import remove as aioremove, path as aiopath, mkdir
-from re import match as re_match
-from time import time
-from html import escape
-from uuid import uuid4
-from subprocess import run as srun
-from psutil import disk_usage, disk_io_counters, Process, cpu_percent, swap_memory, cpu_count, cpu_freq, getloadavg, virtual_memory, net_io_counters, boot_time
 from asyncio import create_subprocess_exec, create_subprocess_shell, run_coroutine_threadsafe, sleep
 from asyncio.subprocess import PIPE
-from functools import partial, wraps
+from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from functools import partial, wraps
+from html import escape
+from os import path as ospath
+from re import match as re_match
+from subprocess import run as srun
+from time import time
+from uuid import uuid4
 
+from aiofiles import open as aiopen
+from aiofiles.os import path as aiopath, mkdir
 from aiohttp import ClientSession as aioClientSession
-from psutil import virtual_memory, cpu_percent, disk_usage
-from requests import get as rget
 from mega import MegaApi
+from pkg_resources import get_distribution, DistributionNotFound
+from psutil import disk_io_counters, Process, swap_memory, cpu_count, cpu_freq, getloadavg, net_io_counters, boot_time
+from psutil import virtual_memory, cpu_percent, disk_usage
 from pyrogram.enums import ChatType
 from pyrogram.types import BotCommand
-from pyrogram.errors import PeerIdInvalid
 
+from bot import OWNER_ID, bot_name, bot_cache, DATABASE_URL, LOGGER, get_client, aria2, download_dict, \
+    download_dict_lock, botStartTime, user_data, config_dict, bot_loop, extra_buttons
 from bot.helper.ext_utils.db_handler import DbManger
-from bot.helper.themes import BotTheme
-from bot.version import get_version
-from bot import OWNER_ID, bot_name, bot_cache, DATABASE_URL, LOGGER, get_client, aria2, download_dict, download_dict_lock, botStartTime, user_data, config_dict, bot_loop, extra_buttons, user
+from bot.helper.ext_utils.shortners import short_url
+from bot.helper.ext_utils.telegraph_helper import telegraph
 from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.button_build import ButtonMaker
-from bot.helper.ext_utils.telegraph_helper import telegraph
-from bot.helper.ext_utils.shortners import short_url
+from bot.helper.themes import BotTheme
+from bot.version import get_version
 
 THREADPOOL   = ThreadPoolExecutor(max_workers=1000)
 MAGNET_REGEX = r'magnet:\?xt=urn:(btih|btmh):[a-zA-Z0-9]*\s*'
@@ -44,8 +43,8 @@ PAGE_NO      = 1
 
 
 class MirrorStatus:
-    STATUS_UPLOADING   = "Uploading"
-    STATUS_DOWNLOADING = "Downloading"
+    STATUS_UPLOADING   = "Upload"
+    STATUS_DOWNLOADING = "Download"
     STATUS_CLONING     = "Clone"
     STATUS_QUEUEDL     = "QueueDL"
     STATUS_QUEUEUP     = "QueueUp"
@@ -53,7 +52,7 @@ class MirrorStatus:
     STATUS_ARCHIVING   = "Archive"
     STATUS_EXTRACTING  = "Extract"
     STATUS_SPLITTING   = "Split"
-    STATUS_METADATA    = "Adding Metadata"
+    STATUS_METADATA    = "Metadata Editing..."
     STATUS_CHECKING    = "CheckUp"
     STATUS_SEEDING     = "Seed"
 
@@ -142,10 +141,10 @@ def get_progress_bar_string(pct):
     p = min(max(pct, 0), 100)
     cFull = int(p // 8)
     cPart = int(p % 8 - 1)
-    p_str = '●' * cFull
+    p_str = '■' * cFull
     if cPart >= 0:
-        p_str += ['◌', '○', '○', '◎', '◉', '◕', '●'][cPart]
-    p_str += '◌' * (12 - cFull)
+        p_str += ['▤', '▥', '▦', '▧', '▨', '▩', '■'][cPart]
+    p_str += '□' * (12 - cFull)
     return f"[{p_str}]"
 
 
@@ -156,12 +155,12 @@ def get_all_versions():
     except FileNotFoundError:
         vp = ''
     try:
-        result = srun([bot_cache['pkgs'][2], '-version'], capture_output=True, text=True)
+        result = srun(['ffmpeg', '-version'], capture_output=True, text=True)
         vf = result.stdout.split('\n')[0].split(' ')[2].split('ubuntu')[0]
     except FileNotFoundError:
         vf = ''
     try:
-        result = srun([bot_cache['pkgs'][3], 'version'], capture_output=True, text=True)
+        result = srun(['rclone', 'version'], capture_output=True, text=True)
         vr = result.stdout.split('\n')[0].split(' ')[1]
     except FileNotFoundError:
         vr = ''
@@ -565,7 +564,7 @@ async def get_stats(event, key="home"):
         if await aiopath.exists('.git'):
             last_commit = (await cmd_exec("git log -1 --pretty='%cd ( %cr )' --date=format-local:'%d/%m/%Y'", True))[0]
             changelog = (await cmd_exec("git log -1 --pretty=format:'<code>%s</code> <b>By</b> %an'", True))[0]
-        official_v = (await cmd_exec("curl -o latestversion.py https://gitlab.com/mysterysd.sd/WZML-X/-/raw/hk_wzmlx/bot/version.py -s && python3 latestversion.py && rm latestversion.py", True))[0]
+        official_v = (await cmd_exec(f"curl -o latestversion.py https://raw.githubusercontent.com/weebzone/WZML-X/{config_dict['UPSTREAM_BRANCH']}/bot/version.py -s && python3 latestversion.py && rm latestversion.py", True))[0]
         msg = BotTheme('REPO_STATS',
             last_commit=last_commit,
             bot_version=get_version(),
