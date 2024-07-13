@@ -9,7 +9,7 @@ from asyncio import Lock
 from dotenv import load_dotenv, dotenv_values
 from threading import Thread
 from time import sleep, time
-from subprocess import Popen, run as srun
+from subprocess import Popen, run as srun, check_output
 from os import remove as osremove, path as ospath, environ, getcwd
 from aria2p import API as ariaAPI, Client as ariaClient
 from qbittorrentapi import Client as qbClient
@@ -132,11 +132,11 @@ TELEGRAM_HASH = environ.get('TELEGRAM_HASH', '')
 if len(TELEGRAM_HASH) == 0:
     log_error("TELEGRAM_HASH variable is missing! Exiting now")
     exit(1)
-    
+
 TIMEZONE = environ.get('TIMEZONE', '')
 if len(TIMEZONE) == 0:
     TIMEZONE = 'Asia/Kolkata'
-    
+
 def changetz(*args):
     return datetime.now(timezone(TIMEZONE)).timetuple()
 Formatter.converter = changetz
@@ -179,7 +179,7 @@ if len(SUDO_USERS) != 0:
     aid = SUDO_USERS.split()
     for id_ in aid:
         user_data[int(id_.strip())] = {'is_sudo': True}
-        
+
 BLACKLIST_USERS = environ.get('BLACKLIST_USERS', '')
 if len(BLACKLIST_USERS) != 0:
     for id_ in BLACKLIST_USERS.split():
@@ -198,11 +198,11 @@ LINKS_LOG_ID = '' if len(LINKS_LOG_ID) == 0 else int(LINKS_LOG_ID)
 MIRROR_LOG_ID = environ.get('MIRROR_LOG_ID', '')
 if len(MIRROR_LOG_ID) == 0:
     MIRROR_LOG_ID = ''
-    
+
 LEECH_LOG_ID = environ.get('LEECH_LOG_ID', '')
 if len(LEECH_LOG_ID) == 0:
     LEECH_LOG_ID = ''
-    
+
 EXCEP_CHATS = environ.get('EXCEP_CHATS', '')
 if len(EXCEP_CHATS) == 0:
     EXCEP_CHATS = ''
@@ -214,7 +214,7 @@ if len(USER_SESSION_STRING) != 0:
     log_info("Creating client from USER_SESSION_STRING")
     try:
         user = tgClient('user', TELEGRAM_API, TELEGRAM_HASH, session_string=USER_SESSION_STRING,
-                        parse_mode=enums.ParseMode.HTML, no_updates=True, max_concurrent_transmissions=1000).start()
+                        parse_mode=enums.ParseMode.HTML, no_updates=True).start()
         IS_PREMIUM_USER = user.me.is_premium
     except Exception as e:
         log_error(f"Failed making client from USER_SESSION_STRING : {e}")
@@ -226,7 +226,9 @@ if len(MEGA_EMAIL) == 0 or len(MEGA_PASSWORD) == 0:
     log_warning('MEGA Credentials not provided!')
     MEGA_EMAIL = ''
     MEGA_PASSWORD = ''
-    
+
+METADATA = environ.get('METADATA', '')
+
 GDTOT_CRYPT = environ.get('GDTOT_CRYPT', '')
 if len(GDTOT_CRYPT) == 0:
     GDTOT_CRYPT = ''
@@ -238,7 +240,7 @@ if len(JIODRIVE_TOKEN) == 0:
 REAL_DEBRID_API = environ.get('REAL_DEBRID_API', '')
 if len(REAL_DEBRID_API) == 0:
     REAL_DEBRID_API = ''
-    
+
 DEBRID_LINK_API = environ.get('DEBRID_LINK_API', '')
 if len(DEBRID_LINK_API) == 0:
     DEBRID_LINK_API = ''
@@ -270,7 +272,7 @@ if len(LEECH_FILENAME_CAPTION) == 0:
 LEECH_FILENAME_REMNAME = environ.get('LEECH_FILENAME_REMNAME', '')
 if len(LEECH_FILENAME_REMNAME) == 0:
     LEECH_FILENAME_REMNAME = ''
-    
+
 MIRROR_FILENAME_PREFIX = environ.get('MIRROR_FILENAME_PREFIX', '')
 if len(MIRROR_FILENAME_PREFIX) == 0:
     MIRROR_FILENAME_PREFIX = ''
@@ -399,7 +401,7 @@ if len(UPSTREAM_REPO) == 0:
 UPSTREAM_BRANCH = environ.get('UPSTREAM_BRANCH', '')
 if len(UPSTREAM_BRANCH) == 0:
     UPSTREAM_BRANCH = 'master'
-    
+
 UPGRADE_PACKAGES = environ.get('UPGRADE_PACKAGES', '')
 UPGRADE_PACKAGES = UPGRADE_PACKAGES.lower() == 'true'
 
@@ -456,6 +458,9 @@ FSUB_IDS = environ.get('FSUB_IDS', '')
 if len(FSUB_IDS) == 0:
     FSUB_IDS = ''
 
+LINKS_LOG_ID = environ.get('LINKS_LOG_ID', '')
+LINKS_LOG_ID = '' if len(LINKS_LOG_ID) == 0 else int(LINKS_LOG_ID)
+
 BOT_PM = environ.get('BOT_PM', '')
 BOT_PM = BOT_PM.lower() == 'true'
 
@@ -501,7 +506,7 @@ if len(AUTHOR_URL) == 0:
 TITLE_NAME = environ.get('TITLE_NAME', '')
 if len(TITLE_NAME) == 0:
     TITLE_NAME = 'WZ-M/L-X'
-    
+
 COVER_IMAGE = environ.get('COVER_IMAGE', '')
 if len(COVER_IMAGE) == 0:
     COVER_IMAGE = 'https://graph.org/file/60f9f8bcb97d27f76f5c0.jpg'
@@ -521,7 +526,7 @@ SET_COMMANDS = SET_COMMANDS.lower() == 'true'
 
 CLEAN_LOG_MSG = environ.get('CLEAN_LOG_MSG', '')
 CLEAN_LOG_MSG = CLEAN_LOG_MSG.lower() == 'true'
-    
+
 SHOW_EXTRA_CMDS = environ.get('SHOW_EXTRA_CMDS', '')
 SHOW_EXTRA_CMDS = SHOW_EXTRA_CMDS.lower() == 'true'
 
@@ -596,6 +601,7 @@ config_dict = {'ANIME_TEMPLATE': ANIME_TEMPLATE,
                'CAP_FONT': CAP_FONT,
                'CMD_SUFFIX': CMD_SUFFIX,
                'DATABASE_URL': DATABASE_URL,
+               'METADATA': METADATA,
                'REAL_DEBRID_API': REAL_DEBRID_API,
                'DEBRID_LINK_API': DEBRID_LINK_API,
                'FILELION_API': FILELION_API,
@@ -736,17 +742,25 @@ if ospath.exists('shorteners.txt'):
             if len(temp) == 2:
                 shorteners_list.append({'domain': temp[0],'api_key': temp[1]})
 
-if BASE_URL:
-    Popen(f"gunicorn web.wserver:app --bind 0.0.0.0:{BASE_URL_PORT} --worker-class gevent", shell=True)
+PORT = environ.get('PORT')
+Popen(f"gunicorn web.wserver:app --bind 0.0.0.0:{PORT} --worker-class gevent", shell=True)
 
-srun(["qbittorrent-nox", "-d", f"--profile={getcwd()}"])
+bot_cache['pkgs'] = ['zetra', 'xon-bit', 'ggrof', 'cross-suck', 'zetra|xon-bit|ggrof|cross-suck']
+
+srun([bot_cache['pkgs'][1], "-d", f"--profile={getcwd()}"])
 if not ospath.exists('.netrc'):
     with open('.netrc', 'w'):
         pass
 srun(["chmod", "600", ".netrc"])
 srun(["cp", ".netrc", "/root/.netrc"])
-srun(["chmod", "+x", "aria.sh"])
-srun("./aria.sh", shell=True)
+trackers = check_output("curl -Ns https://raw.githubusercontent.com/XIU2/TrackersListCollection/master/all.txt https://ngosang.github.io/trackerslist/trackers_all_http.txt https://newtrackon.com/api/all https://raw.githubusercontent.com/hezhijie0327/Trackerslist/main/trackerslist_tracker.txt | awk '$0' | tr '\n\n' ','", shell=True).decode('utf-8').rstrip(',')
+with open("a2c.conf", "a+") as a:
+    if TORRENT_TIMEOUT:
+        a.write(f"bt-stop-timeout={TORRENT_TIMEOUT}\n")
+    a.write(f"bt-tracker=[{trackers}]")
+srun([bot_cache['pkgs'][0], "--conf-path=/usr/src/app/a2c.conf"])
+alive = Popen(["python3", "alive.py"])
+sleep(0.5)
 if ospath.exists('accounts.zip'):
     if ospath.exists('accounts'):
         srun(["rm", "-rf", "accounts"])
@@ -808,7 +822,7 @@ else:
 
 log_info("Creating client from BOT_TOKEN")
 bot = tgClient('bot', TELEGRAM_API, TELEGRAM_HASH, bot_token=BOT_TOKEN, workers=1000,
-               parse_mode=enums.ParseMode.HTML, max_concurrent_transmissions=1000).start()
+               parse_mode=enums.ParseMode.HTML).start()
 bot_loop = bot.loop
 bot_name = bot.me.username
 scheduler = AsyncIOScheduler(timezone=str(get_localzone()), event_loop=bot_loop)
